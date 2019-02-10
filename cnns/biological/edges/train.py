@@ -114,21 +114,21 @@ def EdgeNetwork(parameters, width):
 
     model = Sequential()
 
-    ConvolutionalLayer(model, filter_sizes[0], (3, 3, 3), 'valid', activation, normalization, width)
-    ConvolutionalLayer(model, filter_sizes[0], (3, 3, 3), 'valid', activation, normalization)
+    ConvolutionalLayer(model, filter_sizes[0], (3, 3, 3), 'same', activation, normalization, width)
+    ConvolutionalLayer(model, filter_sizes[0], (3, 3, 3), 'same', activation, normalization)
     PoolingLayer(model, (1, 2, 2), 0.2, normalization)
 
-    ConvolutionalLayer(model, filter_sizes[1], (3, 3, 3), 'valid', activation, normalization)
-    ConvolutionalLayer(model, filter_sizes[1], (3, 3, 3), 'valid', activation, normalization)
+    ConvolutionalLayer(model, filter_sizes[1], (3, 3, 3), 'same', activation, normalization)
+    ConvolutionalLayer(model, filter_sizes[1], (3, 3, 3), 'same', activation, normalization)
     PoolingLayer(model, (1, 2, 2), 0.2, normalization)
 
-    ConvolutionalLayer(model, filter_sizes[2], (3, 3, 3), 'valid', activation, normalization)
-    ConvolutionalLayer(model, filter_sizes[2], (3, 3, 3), 'valid', activation, normalization)
+    ConvolutionalLayer(model, filter_sizes[2], (3, 3, 3), 'same', activation, normalization)
+    ConvolutionalLayer(model, filter_sizes[2], (3, 3, 3), 'same', activation, normalization)
     PoolingLayer(model, (2, 2, 2), 0.2, normalization)
 
     if depth > 3:
-        ConvolutionalLayer(model, filter_sizes[3], (3, 3, 3), 'valid', activation, normalization)
-        ConvolutionalLayer(model, filter_sizes[3], (3, 3, 3), 'valid', activation, normalization)
+        ConvolutionalLayer(model, filter_sizes[3], (3, 3, 3), 'same', activation, normalization)
+        ConvolutionalLayer(model, filter_sizes[3], (3, 3, 3), 'same', activation, normalization)
         PoolingLayer(model, (2, 2, 2), 0.2, normalization)
 
 
@@ -149,6 +149,8 @@ def WriteLogFiles(model, model_prefix, parameters):
     logfile = '{}.log'.format(model_prefix)
 
     with open(logfile, 'w') as fd:
+        print 'Paramters: {}'.format(model.count_params())
+        fd.write('Parameters: {}\n'.format(model.count_params()))
         for layer in model.layers:
             print '{} {} -> {}'.format(layer.get_config()['name'], layer.input_shape, layer.output_shape)
             fd.write('{} {} -> {}\n'.format(layer.get_config()['name'], layer.input_shape, layer.output_shape))
@@ -258,7 +260,7 @@ def Train(parameters, model_prefix, width, radius, finetune=False):
     logfile = '{}.log'.format(model_prefix)
 
     # write out the network parameters to a file
-    WriteLogfiles(model, model_prefix, parameters)
+    WriteLogFiles(model, model_prefix, parameters)
 
     # create a set of keras callbacks
     callbacks = []

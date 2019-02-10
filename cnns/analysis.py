@@ -26,6 +26,7 @@ def ParseInferenceFile(filename):
         precision = float(lines[11].split(':')[1].strip())
         recall = float(lines[12].split(':')[1].strip())
         accuracy = float(lines[13].split(':')[1].strip())
+        f1 = 2*precision*recall/(precision+recall)
 
         return true_positives, false_negatives, false_positives, true_negatives
 
@@ -60,11 +61,16 @@ def PrintResults(results, name):
     if TP + FN == 0: print '    Recall: NaN'
     else: print '    Recall: {}'.format(float(TP) / float(TP + FN))
     if TP + FN + FP + TN == 0: print '    Accuracy: NaN\n'
-    else: print '    Accuracy: {}\n'.format(float(TP + TN) / float(TP + FP + FN + TN))
-
-    if TP + FN + FP + TN == 0: return float('nan')
-    else: return float(TP + TN) / float(TP + FP + FN + TN)
-    
+    else: print '    Accuracy: {}'.format(float(TP + TN) / float(TP + FP + FN + TN))
+    if TP + FP == 0 or FP + TN == 0:
+        print '    F1 Score: NaN\n'
+        return float('nan')    
+    else:
+        precision = float(TP)/float(TP+FP)
+        recall = float(TP)/float(TP+FN)
+        f1 = 2.0*precision*recall/(precision+recall)
+        print '    F1 Score: {}\n'.format(f1)
+        return f1 
     
     
 def CNNResultsSupplemental(problem):
@@ -84,16 +90,16 @@ def CNNResultsSupplemental(problem):
         'test-two': 'testing'
     }
 
-    optimal_training_accuracy = 0.0
+    optimal_training_f1 = 0.0
     optimal_training_network = ''
-    optimal_validation_accuracy = 0.0
+    optimal_validation_f1 = 0.0
     optimal_validation_network = ''
-    optimal_testing_accuracy = 0.0
+    optimal_testing_f1 = 0.0
     optimal_testing_network = ''
 
-    training_accuracies = {}
-    validation_accuracies = {}
-    testing_accuracies = {}
+    training_f1s = {}
+    validation_f1s = {}
+    testing_f1s = {}
     
     for network in network_names:
         if 'Kasthuri' in network or 'Fib25' in network: continue
@@ -130,31 +136,31 @@ def CNNResultsSupplemental(problem):
 
         # agglomerate all results
         print '{}'.format(network.split('/')[1])
-        training_accuracy = PrintResults(training_results, 'Training')
-        validation_accuracy = PrintResults(validation_results, 'Validation')
-        testing_accuracy = PrintResults(testing_results, 'Testing')
+        training_f1 = PrintResults(training_results, 'Training')
+        validation_f1 = PrintResults(validation_results, 'Validation')
+        testing_f1 = PrintResults(testing_results, 'Testing')
 
-        if training_accuracy > optimal_training_accuracy:
-            optimal_training_accuracy = training_accuracy
+        if training_f1 > optimal_training_f1:
+            optimal_training_f1 = training_f1
             optimal_training_network = network
-        if validation_accuracy > optimal_validation_accuracy:
-            optimal_validation_accuracy = validation_accuracy
+        if validation_f1 > optimal_validation_f1:
+            optimal_validation_f1 = validation_f1
             optimal_validation_network = network
-        if testing_accuracy > optimal_testing_accuracy:
-            optimal_testing_accuracy = testing_accuracy
+        if testing_f1 > optimal_testing_f1:
+            optimal_testing_f1 = testing_f1
             optimal_testing_network = network
 
-        training_accuracies[network] = training_accuracy
-        validation_accuracies[network] = validation_accuracy
-        testing_accuracies[network] = testing_accuracy
-        
-    print 'Optimal Training Accuracy: {}'.format(optimal_training_accuracy)
+        training_f1s[network] = training_f1
+        validation_f1s[network] = validation_f1
+        testing_f1s[network] = testing_f1
+ 
+    print 'Optimal Training F1: {}'.format(optimal_training_f1)
     print '  {}\n'.format(optimal_training_network)
 
-    print 'Optimal Validation Accuracy: {}'.format(optimal_validation_accuracy)
+    print 'Optimal Validation F1: {}'.format(optimal_validation_f1)
     print '  {}\n'.format(optimal_validation_network)
 
-    print 'Optimal Testing Accuracy: {}'.format(optimal_testing_accuracy)
+    print 'Optimal Testing F1: {}'.format(optimal_testing_f1)
     print '  {}\n'.format(optimal_testing_network)
 
     prev_diameter = ''
@@ -175,8 +181,8 @@ def CNNResultsSupplemental(problem):
             print '\\centering'
             print '\\caption{Results on \\SI{' + str(diameter) + '}{\\nano\\meter} diameter extracted regions of interest.}'
             print '\\begin{tabular}{c c c c} \\hline'
-            print '\\textbf{Input Size} & \\textbf{Training Accuracy} & \\textbf{Validation Accuracy} & \\textbf{Testing Accuracy}  \\\\ \\hline'        
-        print '{} & {:0.4f} & {:0.4f} & {:0.4f} \\\\'.format(width, training_accuracies[network], validation_accuracies[network], testing_accuracies[network])
+            print '\\textbf{Input Size} & \\textbf{Training F1} & \\textbf{Validation F1} & \\textbf{Testing F1}  \\\\ \\hline'        
+        print '{} & {:0.4f} & {:0.4f} & {:0.4f} \\\\'.format(width, training_f1s[network], validation_f1s[network], testing_f1s[network])
 
         prev_diameter = input_diameter
 
