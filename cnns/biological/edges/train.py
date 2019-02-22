@@ -10,8 +10,8 @@ import matplotlib.pyplot as plt
 
 
 from keras.models import Sequential
-from keras.layers import Activation, BatchNormalization, Convolution3D, Dense, Dropout, Flatten, MaxPooling3D
-from keras.layers.advanced_activations import LeakyReLU
+from keras.layers import Layer, Activation, BatchNormalization, Convolution3D, Add, Dense, Dropout, Flatten, MaxPooling3D
+from keras.layers.advanced_activations import LeakyReLU, ELU
 from keras.optimizers import Adam, SGD
 import keras
 
@@ -19,14 +19,51 @@ from ibex.utilities import dataIO
 from ibex.utilities.constants import *
 from ibex.cnns.biological.util import AugmentFeature
 
+from tensorflow.python.client import device_lib
+from keras.utils import multi_gpu_model
 
+
+# Adapted from: https://sebastianwallkoetter.wordpress.com/2018/04/08/layered-layers-residual-blocks-in-the-sequential-keras-api/
+class Residual(Layer):
+    def __init__(self, filter_size, kernel_size, padding, activation, normalization, **kwargs):
+        super(Residual, self).__init__(**kwargs)
+        self.filter_size = filter_size
+        self.kernel_size = kernel_size
+        self.padding = padding
+        self.activation = activation
+        self.normalization = normalization
+
+    def call(self, x):
+        first_layer = x
+        x = Convolution3D(self.filter_size, self.kernel_size, padding=self.padding, dilation_rate=1, strides=1)(first_layer)
+        if self.activation == 'LeakyReLU':
+            x = LeakyReLU(alpha=0.001)(x)
+        elif self.activation == 'ELU':
+            x = ELU()(x)
+        else:
+            x = Activation(self.activation)(x)
+    
+        if self.normalization:
+            x = BatchNormalization()(x)
+        x = Convolution3D(self.filter_size, self.kernel_size, padding=self.padding, dilation_rate=1, strides=1)(x)
+ 
+        residual = Add()([x, first_layer])
+        return residual
+
+    def compute_output_shape(self, input_shape):
+        return input_shape
+
+def ResidualLayer(model, filter_size, kernel_size, padding, activation, normalization):
+    model.add(Residual(filter_size, kernel_size, padding, activation, normalization))
+ 
 # add a convolutional layer to the model
 def ConvolutionalLayer(model, filter_size, kernel_size, padding, activation, normalization, input_shape=None):
-    if not input_shape == None: model.add(Convolution3D(filter_size, kernel_size, padding=padding, input_shape=input_shape))
-    else: model.add(Convolution3D(filter_size, kernel_size, padding=padding))
+    if not input_shape == None: model.add(Convolution3D(filter_size, kernel_size, padding=padding, input_shape=input_shape, dilation_rate=1, strides=1))
+    else: model.add(Convolution3D(filter_size, kernel_size, padding=padding, dilation_rate=1, strides=1))
 
     # add activation layer
     if activation == 'LeakyReLU': model.add(LeakyReLU(alpha=0.001))
+    elif activation == 'ELU': model.add(ELU())
     else: model.add(Activation(activation))
     
     # add normalization after activation
@@ -59,6 +96,7 @@ def DenseLayer(model, filter_size, dropout, activation, normalization):
 
     # add activation layer
     if activation == 'LeakyReLU': model.add(LeakyReLU(alpha=0.001))
+    elif activation == 'ELU': model.add(ELU())
     else: model.add(Activation(activation))
 
     # add normalization after activation
@@ -118,8 +156,9 @@ def EdgeNetwork(parameters, width):
     ConvolutionalLayer(model, filter_sizes[0], (3, 3, 3), 'same', activation, normalization)
     PoolingLayer(model, (1, 2, 2), 0.2, normalization)
 
-    ConvolutionalLayer(model, filter_sizes[1], (3, 3, 3), 'same', activation, normalization)
-    ConvolutionalLayer(model, filter_sizes[1], (3, 3, 3), 'same', activation, normalization)
+    ResidualLayer(model, filter_sizes[0], (3,3,3), 'same', activation, normalization)
+    #ConvolutionalLayer(model, filter_sizes[1], (3, 3, 3), 'same', activation, normalization)
+    #ConvolutionalLayer(model, filter_sizes[1], (3, 3, 3), 'same', activation, normalization)
     PoolingLayer(model, (1, 2, 2), 0.2, normalization)
 
     ConvolutionalLayer(model, filter_sizes[2], (3, 3, 3), 'same', activation, normalization)
@@ -138,7 +177,11 @@ def EdgeNetwork(parameters, width):
 
     if optimizer == 'adam': opt = Adam(lr=initial_learning_rate, decay=decay_rate, beta_1=betas[0], beta_2=betas[1], epsilon=1e-08)
     elif optimizer == 'nesterov': opt = SGD(lr=initial_learning_rate, decay=decay_rate, momentum=0.99, nesterov=True)
-    model.compile(loss=loss_function, optimizer=opt, metrics=['mean_squared_error', 'accuracy'])
+    #print("available devices:")
+    #print(device_lib.list_local_devices())
+    parallel_model = multi_gpu_model(model, gpus=2)
+    model.compile(loss=loss_function, optimizer=opt, metrics=['accuracy'])
+    parallel_model.compile(loss=loss_function, optimizer=opt, metrics=['accuracy'])
     
     return model
 
@@ -289,7 +332,7 @@ def Train(parameters, model_prefix, width, radius, finetune=False):
 
     # train the model
     history = model.fit_generator(EdgeGenerator(parameters, width, radius, 'training'), steps_per_epoch=(examples_per_epoch / batch_size), 
-        epochs=2000, verbose=1, class_weight=weights, callbacks=callbacks, validation_data=EdgeGenerator(parameters, width, radius, 'validation'), 
+        epochs=2000, verbose=2, class_weight=weights, callbacks=callbacks, validation_data=EdgeGenerator(parameters, width, radius, 'validation'), 
                                   validation_steps=(nvalidation_examples / batch_size), initial_epoch=starting_epoch)
     
     with open('{}-history.pickle'.format(model_prefix), 'w') as fd:
